@@ -1,10 +1,3 @@
-# TeachableMacine
-An example ACAP to run models exported [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) in the camera.
-
-The model included in the example is mobilenet-V2-224 that detects 1001 objects.  This can be replaced with your own model.
-1. Export 
-
-
 # Teachable Machine ACAP
 
 ## Overview
