@@ -11,7 +11,7 @@ The package can be compiled as-is.  The model included is mobilenet V2 224 but t
 
 ## Building
 1. Clone this repository
-2. Use n [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) to train your model.
+2. Use [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) to train your model.
 3. Export the model in both TFLITE Edge TPU and TFLITE Quntization.
 4. Unzip both files and place the files under app/model. 
 It is recommeded to have file names that easily seperates the EdgeTPU from the Quantized model file.  The labels.txt must be called labels.txt and must have an empty last line.
