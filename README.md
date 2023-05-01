@@ -11,10 +11,10 @@ The package can be compiled as-is.  THe modle included is mobilenet V2 224. The 
 
 ## Building
 1. Clone this directory
-2. Use Tachable Machine to train your model.
-3. Export TFLITE Edge TPU and TFLITE Quntization
-4. Unzip both files and replace the files under app/model.  
-It is recommeded to have file names that easily seperates the EdgeTPU from the Quantized model file.  The labels.txt must be called labels.txt.
+2. Use n [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) to train your model.
+3. Export the model in both TFLITE Edge TPU and TFLITE Quntization.
+4. Unzip both files and place the files under app/model. 
+It is recommeded to have file names that easily seperates the EdgeTPU from the Quantized model file.  The labels.txt must be called labels.txt and must have an empty last line.
 5. Edit the Dockerfile line 70 and 72 with the filename you chose under app/model/ e.g. ```/opt/app/model/model_quant.tflite```.  Make sure that the EdgeTPU and Quant file are set on the correct lines based on platform.  Note that Docker will copy the correct file to model/model.tflite to be included in the ACAP depending on the platform selected.
 6. Compile the ACAP from TeachableMachine/ directory.  Type:
    ```. artpec8.sh```  
