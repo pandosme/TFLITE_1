@@ -1,0 +1,38 @@
+{
+    "schemaVersion": "1.1",
+    "acapPackageConf": {
+        "setup": {
+            "friendlyName": "Teachable Machine EdgeTPU",
+            "appName": "inference",
+            "vendor": "Fred Juhlin",
+            "embeddedSdkVersion": "3.0",
+            "user": {
+                "group": "sdk",
+                "username": "sdk"
+            },
+            "vendorUrl": "https://pandosme.github.io",
+            "runMode": "once",
+            "version": "1.0.0"
+        },
+        "configuration": {
+			"settingPage": "index.html",
+			"httpConfig": [
+				{
+					"name": "app",
+					"access": "admin",
+					"type": "transferCgi"
+				},
+				{
+					"name": "TeachableMachine",
+					"access": "admin",
+					"type": "transferCgi"
+				},
+				{
+					"name": "run",
+					"access": "admin",
+					"type": "transferCgi"
+				}
+			]		
+		}
+    }
+}
