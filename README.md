@@ -7,10 +7,10 @@ The final output are ACAPs that can run camera based on:
 * ARMv7hf TPU (P3255, AXIS Q1615 Mk III, Q1715, M4308 )
 * ARMv7hf (All models without TPU.  CPU will be used)
 
-The package can be compiled as-is.  THe modle included is mobilenet V2 224. The ides is to replace this modelyour own.
+The package can be compiled as-is.  The model included is mobilenet V2 224 but the idea is to replace this with your own model.
 
 ## Building
-1. Clone this directory
+1. Clone this repository
 2. Use n [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) to train your model.
 3. Export the model in both TFLITE Edge TPU and TFLITE Quntization.
 4. Unzip both files and place the files under app/model. 
@@ -20,7 +20,7 @@ It is recommeded to have file names that easily seperates the EdgeTPU from the Q
    ```. artpec8.sh```  
    ```. edgetpu.sh```  
    ```. armv7hf.sh```
- 6. Install the eap-files in appropriate camera model
+7. Install the eap-files in appropriate camera model
  
  ## Usage
 Clients may request inference using the the URL ```http://camera-ip/local/inference/run```.  The ACAP web page uses the same CGI to update the result every 500ms. 
