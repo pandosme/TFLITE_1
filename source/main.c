@@ -21,15 +21,13 @@
 #define APP_PACKAGE	"inference"
 
 volatile sig_atomic_t stopRunning = 0;
-cJSON* teachablemachine = 0;
+cJSON* modelSettings = 0;
 
 
 static void
 run_HTTP(const HTTP_Response response,const HTTP_Request request) {
 	
-	LOG_TRACE("%s: \n",__func__);
-	
-	if( !teachablemachine ) {
+	if( !modelSettings ) {
 		HTTP_Respond_Error( response, 500, "Teachable Machine is not initialized" );
 		return;
 	}
@@ -39,6 +37,7 @@ run_HTTP(const HTTP_Response response,const HTTP_Request request) {
 		HTTP_Respond_Error( response, 500, "Inference failed" );
 		return;
 	}
+	
 	HTTP_Respond_JSON( response, inference );
 	cJSON_Delete(inference);
 }
@@ -62,9 +61,9 @@ main() {
 	GMainLoop *loop;
 
 	APP( APP_PACKAGE, NULL );
-	teachablemachine = TeachableMachine(APP_PACKAGE);
-	if( teachablemachine )
-		APP_Register("TeachableMachine",teachablemachine);
+	modelSettings = TeachableMachine(APP_PACKAGE);
+	if( modelSettings )
+		APP_Register("TeachableMachine",modelSettings);
 	else
 		LOG_WARN("Unable to initialize model\n");
 

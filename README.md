@@ -4,8 +4,8 @@
 This examples shows how to export models created in [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) and run them in the camera using the ACAP platform.
 The final output are ACAPs that can run camera based on:
 * ARTPEC-8
-* ARMv7HF TPU (P3255, AXIS Q1615 Mk III, Q1715, M4308 )
-* ARMv7 (All models without TPU.  CPU will be used)
+* ARMv7hf TPU (P3255, AXIS Q1615 Mk III, Q1715, M4308 )
+* ARMv7hf (All models without TPU.  CPU will be used)
 
 The package can be compiled as-is.  THe modle included is mobilenet V2 224. The ides is to replace this modelyour own.
 

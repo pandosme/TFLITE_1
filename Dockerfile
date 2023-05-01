@@ -63,6 +63,7 @@ RUN mkdir -p lib include && \
     ln -s libyuv.so.1 lib/libyuv.so && \
     ln -s libyuv.so.1 lib/libyuv.so.1.0
 
+
 ARG CHIP=
 
 RUN if [ "$CHIP" = cpu ] || [ "$CHIP" = artpec8 ]; then \
