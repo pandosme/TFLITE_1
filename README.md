@@ -48,10 +48,10 @@ You can customize the package in name, HTML, CGI, behavior and output.
 
 ### Name
 The ACAP has a package name (inference) and a Nice Name (Teachable Macine).  These names are defined in the following files
-* app/manifest.json.*
-* app/Makefile (row 1)
-* main.c (row 21)
+* source/manifest.json.*
+* source/Makefile (row 1)
+* source/main.c (row 21)
 
 ### User interface page
-* app/html/index.html
+* source/html/index.html
 
