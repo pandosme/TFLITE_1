@@ -1,7 +1,8 @@
 /*
-	Fred Juhlin 2023
-
-	Based on https://github.com/AxisCommunications/acap3-examples/tree/main/object-detection
+ *	Fred Juhlin 2023
+ *	Optimized for quantized TFLITE files with one output where lable scores are provided as an int8 array
+ *	
+ *	Based on https://github.com/AxisCommunications/acap3-examples/tree/main/object-detection
 */
 
 #include <stdlib.h>
@@ -40,21 +41,18 @@
 // Hardcode to use three image "color" channels (eg. RGB).
 const unsigned int CHANNELS = 3;
 
-char* modelFile = "/usr/local/packages/inference/model/model.tflite";
-char* labelsFile = "/usr/local/packages/inference/model/labels.txt";
-size_t numberOfLabels = 0; // Will be parsed from the labels file
 
 unsigned modelWidth = 224;
 unsigned modelHeigth = 224;
-unsigned sensorWidth = 1920; //ToDo  read out max resolution
-unsigned sensorHeight = 1080;
 double confidenceLevel = 60;
 unsigned int streamWidth = 0;
 unsigned int streamHeight = 0;
 
+char modelFile[128];
+char labelsFile[128];
+size_t numberOfLabels = 0; // Will be parsed from the labels file
 
 // Name patterns for the temp file we will create.
-
 char CONV_INP_FILE_PATTERN[] = "/tmp/larod.in.test-XXXXXX";
 char CONV_OUT1_FILE_PATTERN[] = "/tmp/larod.out1.test-XXXXXX";
 
@@ -76,7 +74,7 @@ char** labels = NULL; // This is the array of label strings. The label
 					  // entries points into the large labelFileData buffer.
 char* labelFileData = NULL; // Buffer holding the complete collection of label strings.
 
-cJSON* TeachableMachine_Settings = 0;
+cJSON* TFLITE_Settings = 0;
 const char* ACAP_PACKAGE = 0;
 
 /**
@@ -112,7 +110,7 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
 
     struct stat fileStats = {0};
     if (stat(labelsPath, &fileStats) < 0) {
-        LOG_WARN( "%s: Unable to get stats for label file %s: %s", __func__, labelsPath, strerror(errno));
+        LOG_WARN( "%s: Unable to get stats for label file %s: %s\n", __func__, labelsPath, strerror(errno));
         return false;
     }
 
@@ -122,13 +120,13 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
     // will not encounter larger label files and both off_t and size_t should be
     // able to represent 10 megabytes on both 32-bit and 64-bit systems.
     if (fileStats.st_size > (10 * 1024 * 1024)) {
-        LOG_WARN( "%s: failed sanity check on labels file size", __func__);
+        LOG_WARN( "%s: failed sanity check on labels file size\n", __func__);
         return false;
     }
 
     int labelsFd = open(labelsPath, O_RDONLY);
     if (labelsFd < 0) {
-        LOG_WARN( "%s: Could not open labels file %s: %s", __func__, labelsPath, strerror(errno));
+        LOG_WARN( "%s: Could not open labels file %s: %s\n", __func__, labelsPath, strerror(errno));
         return false;
     }
 
@@ -136,7 +134,7 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
     // Allocate room for a terminating NULL char after the last line.
     labelsData = malloc(labelsFileSize + 50);
     if (labelsData == NULL) {
-        LOG_WARN( "%s: Failed allocating labels text buffer: %s", __func__,
+        LOG_WARN( "%s: Failed allocating labels text buffer: %s\n", __func__,
                strerror(errno));
         goto end;
     }
@@ -149,7 +147,7 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
             read(labelsFd, fileReadPtr, labelsFileSize - totalBytesRead);
 
         if (numBytesRead < 1) {
-            LOG_WARN( "%s: Failed reading from labels file: %s", __func__,
+            LOG_WARN( "%s: Failed reading from labels file: %s\n", __func__,
                    strerror(errno));
             goto end;
         }
@@ -173,7 +171,7 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
 
     labelArray = malloc(numLines * sizeof(char*));
     if (!labelArray) {
-        LOG_WARN( "%s: Unable to allocate labels array: %s", __func__,
+        LOG_WARN( "%s: Unable to allocate labels array: %s\n", __func__,
                strerror(errno));
         ret = false;
         goto end;
@@ -241,18 +239,18 @@ bool createAndMapTmpFile(char* fileName, size_t fileSize, void** mappedAddr, int
 
     int fd = mkstemp(fileName);
     if (fd < 0) {
-        LOG_WARN( "%s: Unable to open temp file %s: %s", __func__, fileName, strerror(errno));
+        LOG_WARN( "%s: Unable to open temp file %s: %s\n", __func__, fileName, strerror(errno));
         goto error;
     }
     // Allocate enough space in for the fd.
     if (ftruncate(fd, (off_t) fileSize) < 0) {
-        LOG_WARN( "%s: Unable to truncate temp file %s: %s", __func__, fileName, strerror(errno));
+        LOG_WARN( "%s: Unable to truncate temp file %s: %s\n", __func__, fileName, strerror(errno));
         goto error;
     }
 
     // Remove since we don't actually care about writing to the file system.
     if (unlink(fileName)) {
-        LOG_WARN( "%s: Unable to unlink from temp file %s: %s", __func__, fileName, strerror(errno));
+        LOG_WARN( "%s: Unable to unlink from temp file %s: %s\n", __func__, fileName, strerror(errno));
         goto error;
     }
 
@@ -260,7 +258,7 @@ bool createAndMapTmpFile(char* fileName, size_t fileSize, void** mappedAddr, int
     void* data = mmap(NULL, fileSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
     if (data == MAP_FAILED) {
-        LOG_WARN( "%s: Unable to mmap temp file %s: %s", __func__, fileName, strerror(errno));
+        LOG_WARN( "%s: Unable to mmap temp file %s: %s\n", __func__, fileName, strerror(errno));
         goto error;
     }
 
@@ -302,7 +300,7 @@ bool setupLarod(const int larodModelFd, larodConnection** larodConn, larodModel*
 
     // Set up larod connection.
     if (!larodConnect(&conn, &error)) {
-        LOG_WARN( "%s: Could not connect to larod: %s", __func__, error->msg);
+        LOG_WARN( "%s: Could not connect to larod: %s\n", __func__, error->msg);
         goto end;
     }
 
@@ -320,7 +318,7 @@ bool setupLarod(const int larodModelFd, larodConnection** larodConn, larodModel*
 				STATUS_SetString( "model", "architecture", "CPU" );	
 			} else {
 				STATUS_SetString("model","status", "No compatible architecture found");
-				LOG_WARN("No Larod compatible chip found");
+				LOG_WARN("No Larod compatible chip found\n");
 				goto error;
 			}
 		}
@@ -329,7 +327,7 @@ bool setupLarod(const int larodModelFd, larodConnection** larodConn, larodModel*
     loadedModel = larodLoadModel(conn, larodModelFd, LAROD_ACCESS_PRIVATE, ACAP_PACKAGE, &error);
     if (!loadedModel) {
 		STATUS_SetString("model","status", "Unable to load model");
-        LOG_WARN( "%s: Unable to load model: %s", __func__, error->msg);
+        LOG_WARN( "%s: Unable to load model: %s\n", __func__, error->msg);
         goto error;
     }
 
@@ -356,13 +354,20 @@ end:
 int inferenceRunning = 0;
 
 cJSON*
-TeachableMachine_Inference() {
+TFLITE_Inference() {
 
 	struct timeval startTs, endTs;
 	unsigned int elapsedMs = 0;
 
+	if( !TFLITE_Settings ) {
+		LOG_WARN("%s: TFLITE_Settings is NULL\n", __func__ );
+		return 0;
+	}
+
+
 	if( inferenceRunning )
 		return 0;
+	inferenceRunning = 1;
 
 	if( !provider) {
 		STATUS_SetString("model","state","No image provider");
@@ -374,6 +379,7 @@ TeachableMachine_Inference() {
 	if (!buf) {
 		LOG_WARN( "%s: No image avaialable\n", __func__ );
 		STATUS_SetString("model","state","No image provider");
+		inferenceRunning = 0;
 		return 0;
 	}
 
@@ -409,8 +415,6 @@ TeachableMachine_Inference() {
 		return 0;
 	}
 
-	inferenceRunning = 0;
-
 	gettimeofday(&endTs, NULL);
 
 	elapsedMs = (unsigned int) (((endTs.tv_sec - startTs.tv_sec) * 1000) +
@@ -437,43 +441,53 @@ TeachableMachine_Inference() {
 	}
 	
 	returnFrame(provider, buf);
+	inferenceRunning = 0;	
 	LOG_TRACE("%s: Exit\n",__func__);
 	return payload;
 }
 
 static void
-TeachableMachine_HTTP_Settings(const HTTP_Response response,const HTTP_Request request) {
+TFLITE_HTTP_Settings(const HTTP_Response response,const HTTP_Request request) {
 	
-	const char* json = HTTP_Request_Param( request, "json");
+	if( !TFLITE_Settings ) {
+		LOG_WARN("%s: TFLITE_Settings is NULL\n",__func__ );
+		HTTP_Respond_Error( response, 400, "Settings corrupt");
+		return;
+	}
+
+	const char *json = HTTP_Request_Param( request, "json");
 	if( !json )
 		json = HTTP_Request_Param( request, "set");
 	if( !json ) {
-		HTTP_Respond_JSON( response, TeachableMachine_Settings );
+		HTTP_Respond_JSON( response, TFLITE_Settings );
 		return;
 	}
+
+	LOG_TRACE("%s: %s\n",__func__,json);
 
 	cJSON *params = cJSON_Parse(json);
 	if(!params) {
 		HTTP_Respond_Error( response, 400, "Invalid JSON data");
 		return;
 	}
-	LOG_TRACE("%s: %s\n",__func__,json);
+
 	cJSON* param = params->child;
 	while(param) {
-		if( cJSON_GetObjectItem(TeachableMachine_Settings,param->string ) )
-			cJSON_ReplaceItemInObject(TeachableMachine_Settings,param->string,cJSON_Duplicate(param,1) );
+		if( cJSON_GetObjectItem(TFLITE_Settings,param->string ) )
+			cJSON_ReplaceItemInObject(TFLITE_Settings,param->string,cJSON_Duplicate(param,1) );
 		param = param->next;
 	}
 	cJSON_Delete(params);
 
-	confidenceLevel = cJSON_GetObjectItem(TeachableMachine_Settings,"confidence")?cJSON_GetObjectItem(TeachableMachine_Settings,"confidence")->valuedouble:60.0;
+	confidenceLevel = cJSON_GetObjectItem(TFLITE_Settings,"confidence")?cJSON_GetObjectItem(TFLITE_Settings,"confidence")->valuedouble:60.0;
 	
-	FILE_Write( "localdata/TeachableMachine.json", TeachableMachine_Settings);
+	FILE_Write( "localdata/model.json", TFLITE_Settings);
+	LOG_TRACE("HTTP Exit\n");
 	HTTP_Respond_Text( response, "OK" );
 }
 
 void 
-TeachableMachine_Close() {
+TFLITE_Close() {
 	
     if (provider) {
 		stopFrameFetch(provider);
@@ -517,68 +531,74 @@ TeachableMachine_Close() {
 }
 
 cJSON*
-TeachableMachine( const char* package ) {
+TFLITE( const char* package ) {
 	LOG_TRACE("%s: \n",__func__);
 	ACAP_PACKAGE = package;
 	STATUS_SetString( "model", "status", "Initializing" );
 	STATUS_SetBool( "model", "state", 0 );	
 	STATUS_SetString( "model", "architecture", "Undefined" );	
 
-	cJSON* TeachableMachine_Settings = FILE_Read( "html/config/TeachableMachine.json" );
-	if(!TeachableMachine_Settings)
-		TeachableMachine_Settings = cJSON_CreateObject();
+	sprintf(modelFile,"/usr/local/packages/%s/model/model.tflite", package);
+	sprintf(labelsFile,"/usr/local/packages/%s/model/labels.txt", package);
+
+	TFLITE_Settings = FILE_Read( "html/config/model.json" );
+	if(!TFLITE_Settings)
+		TFLITE_Settings = cJSON_CreateObject();
 
 	cJSON* savedSettings = FILE_Read( "localdata/settings.json" );
 	if( savedSettings ) {
 		cJSON* prop = savedSettings->child;
 		while(prop) {
-			if( cJSON_GetObjectItem(TeachableMachine_Settings,prop->string ) )
-				cJSON_ReplaceItemInObject(TeachableMachine_Settings,prop->string,cJSON_Duplicate(prop,1) );
+			if( cJSON_GetObjectItem(TFLITE_Settings,prop->string ) )
+				cJSON_ReplaceItemInObject(TFLITE_Settings,prop->string,cJSON_Duplicate(prop,1) );
 			prop = prop->next;
 		}
 		cJSON_Delete(savedSettings);
 	}
 
-	confidenceLevel = cJSON_GetObjectItem(TeachableMachine_Settings,"confidence")?cJSON_GetObjectItem(TeachableMachine_Settings,"confidence")->valuedouble:60.0;
+	confidenceLevel = cJSON_GetObjectItem(TFLITE_Settings,"confidence")?cJSON_GetObjectItem(TFLITE_Settings,"confidence")->valuedouble:60.0;
+	modelWidth = cJSON_GetObjectItem(TFLITE_Settings,"modelWidth")?cJSON_GetObjectItem(TFLITE_Settings,"modelWidth")->valueint:224;
+	modelHeigth = cJSON_GetObjectItem(TFLITE_Settings,"modelHeigth")?cJSON_GetObjectItem(TFLITE_Settings,"modelHeigth")->valueint:224;
+
 
     if (!chooseStreamResolution(modelWidth, modelHeigth, &streamWidth,&streamHeight)) {
-        LOG_WARN( "%s: Failed choosing stream resolution", __func__);
-        TeachableMachine_Close();
+        LOG_WARN( "%s: Failed choosing stream resolution\n", __func__);
+        TFLITE_Close();
 		STATUS_SetString("model","state","No valid stream resolutions");
 		return 0;
     }
 	
     if (!labelsFile) {
         LOG_WARN( "%s: Missing labels file\n",__func__);
-		TeachableMachine_Close();
+		TFLITE_Close();
 		STATUS_SetString( "model", "status", "Missing labels file" );
 		return 0;
 	}
 	
     if (!parseLabels(&labels, &labelFileData, labelsFile, &numberOfLabels)) {
         LOG_WARN( "%s: Failed creating parsing labels file\n",__func__);
-		TeachableMachine_Close();
+		TFLITE_Close();
 		STATUS_SetString("model","state","Invalid labels file");
 		return 0;
     }
 
     provider = createImgProvider(streamWidth, streamHeight, 2, VDO_FORMAT_YUV);
     if (!provider) {
-		LOG_WARN( "%s: Failed to create ImgProvider", __func__);
-        TeachableMachine_Close();
+		LOG_WARN( "%s: Failed to create ImgProvider\n", __func__);
+        TFLITE_Close();
 		STATUS_SetString("model","state","Failed to create image provider");
 		return 0;
     }
 
     larodModelFd = open(modelFile, O_RDONLY);
     if (larodModelFd < 0) {
-        LOG_WARN( "%s: Unable to open model file %s: %s", __func__,modelFile,  strerror(errno));
-        TeachableMachine_Close();
+        LOG_WARN( "%s: Unable to open model file %s: %s\n", __func__,modelFile,  strerror(errno));
+        TFLITE_Close();
 		STATUS_SetString("model","state","Model file does not exist");
 		return 0;
     }
     if (!setupLarod(larodModelFd, &conn, &model)) {
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Failed setting up architecture");
 		return 0;
     }
@@ -586,29 +606,29 @@ TeachableMachine( const char* package ) {
     // Allocate space for input tensor
     if (!createAndMapTmpFile(CONV_INP_FILE_PATTERN, modelWidth * modelHeigth * CHANNELS, &larodInputAddr, &larodInputFd)) {
 		STATUS_SetString( "model", "status", "Allocation failed" );
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Input data allocation failed");
 		return 0;
     }
     // Allocate space for output tensor 1 (Locations)
     if (!createAndMapTmpFile(CONV_OUT1_FILE_PATTERN, numberOfLabels,  &larodOutput1Addr, &larodOutput1Fd)) {
 		STATUS_SetString( "model", "status", "Allocation failed" );
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Output data allocation failed");
 		return 0;
     }
     inputTensors = larodCreateModelInputs(model, &numInputs, &error);
     if (!inputTensors) {
 		STATUS_SetString( "model", "status", "Failed retrieving input tensors" );
-        LOG_WARN( "Failed retrieving input tensors: %s", error->msg);
-        TeachableMachine_Close();
+        LOG_WARN( "Failed retrieving input tensors: %s\n", error->msg);
+        TFLITE_Close();
 		STATUS_SetString("model","state","Failed initializing input tensor");
 		return 0;
     }
     if (!larodSetTensorFd(inputTensors[0], larodInputFd, &error)) {
 		STATUS_SetString( "model", "status", "Failed setting input tensor" );
         LOG_WARN( "%s: Failed setting input tensor fd: %s\n", __func__,error->msg);
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Failed initializing input tensor");
 		return 0;
     }
@@ -616,7 +636,7 @@ TeachableMachine( const char* package ) {
     if (!outputTensors) {
 		STATUS_SetString( "model", "status", "Failed retrieving output tensors" );
         LOG_WARN( "%s: Failed retrieving output tensors: %s\n", __func__, error->msg);
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Failed initializing output tensor");
 		return 0;
     }
@@ -624,7 +644,7 @@ TeachableMachine( const char* package ) {
     if (!larodSetTensorFd(outputTensors[0], larodOutput1Fd, &error)) {
 		STATUS_SetString( "model", "status", "Failed setting output tensor" );
         LOG_WARN( "%s: Failed setting output tensor fd: %s\n", __func__, error->msg);
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Failed initializing output tensor");
 		return 0;
     }
@@ -633,10 +653,13 @@ TeachableMachine( const char* package ) {
     if (!infReq) {
 		STATUS_SetString( "model", "status", "Failed creating inference request" );
         LOG_WARN( "%s: Failed creating inference request: %s\n", __func__, error->msg);
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Failed creating inference request");
 		return 0;
     }
+
+	if( !TFLITE_Settings )
+		LOG_WARN("%s: CCC TFLITE_Settings is NULL\n",__func__ );
 
 
 	STATUS_SetNumber( "model", "labels", numberOfLabels );
@@ -645,7 +668,7 @@ TeachableMachine( const char* package ) {
 
     if (!startFrameFetch(provider)) {
         LOG_WARN( "%s: Unable to start image provider\n",__func__);
-        TeachableMachine_Close();
+        TFLITE_Close();
 		STATUS_SetString("model","state","Unable to start image provider");
 		return 0;
     }
@@ -653,7 +676,7 @@ TeachableMachine( const char* package ) {
 	STATUS_SetString( "model", "status", "OK" );
 	STATUS_SetBool( "model", "state", 1 );	
 
-	HTTP_Node("TeachableMachine",TeachableMachine_HTTP_Settings);
+	HTTP_Node("model",TFLITE_HTTP_Settings);
 
-    return TeachableMachine_Settings;
+    return TFLITE_Settings;
 }

@@ -53,8 +53,8 @@ td.value  {color: blue;}
 							</div>
 							<script>
 							$("#settings_confidence").change(function() {
-								App.TeachableMachibe.confidence = parseInt( $("#settings_confidence").val() );
-								var url = "TeachableMachibe?json=" + encodeURIComponent( JSON.stringify(App.TeachableMachibe) );
+								App.model.confidence = parseInt( $("#settings_confidence").val() );
+								var url = "model?json=" + encodeURIComponent( JSON.stringify(App.model) );
 								$.ajax({ type: "GET", url: url, dataType: 'text',  cache: false,
 									error: function( response) {
 										alert(response.statusText);
@@ -75,8 +75,7 @@ td.value  {color: blue;}
 					
 					<table style="width:100%">
 						<tbody id="inference">
-							<tr><td>Time</td><td id="time"></td></tr>
-							<tr><td>Inference time</td><td id="duration"></td></tr>
+							<tr><td width="80">Inference time</td><td id="duration" width="20%"></td></tr>
 						</tbody>
 					</table>
 					</br>
@@ -106,11 +105,10 @@ var inferenceTimer = 0;
 
 function inference() {
 	if( App.status.model.state ) {
-		$.ajax({ type: "GET", url: 'run', dataType: 'json',  cache: true,
+		$.ajax({ type: "GET", url: 'inference', dataType: 'json',  cache: true,
 			success: function( inference ) {
 				if( !inference.hasOwnProperty("list") || inference.list.length === 0 )
 					return;
-				$("#time").html(inference.localtime);	
 				$("#duration").html(inference.duration);
 				$("#detections").empty();
 				for( var i = 0; i < inference.list.length; i++ )
@@ -175,7 +173,7 @@ $(document).ready( function() {
 			App = data;
 			SetupView( App.device );
 			$("#model_status").val(App.status.model.status);
-			$("#settings_confidence").val(App.TeachableMachibe.confidence);
+			$("#settings_confidence").val(App.model.confidence);
 		},
 		error: function( response) {
 			alert(response.statusText);

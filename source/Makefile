@@ -1,5 +1,5 @@
-PROG1	= inference
-OBJS1	= main.c imgconverter.c imgprovider.c imgutils.c cJSON.c HTTP.c FILE.c APP.c STATUS.c DEVICE.c TeachableMachine.c
+PROG1	= tflite
+OBJS1	= main.c imgconverter.c imgprovider.c imgutils.c cJSON.c HTTP.c FILE.c APP.c STATUS.c DEVICE.c TFLITE_1.c
 PROGS	= $(PROG1)
 
 PKGS = gio-2.0 gio-2.0 gio-unix-2.0 vdostream liblarod axhttp

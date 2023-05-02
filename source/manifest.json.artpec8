@@ -2,8 +2,8 @@
     "schemaVersion": "1.1",
     "acapPackageConf": {
         "setup": {
-            "friendlyName": "Teachable Machine ARTPEC-8",
-            "appName": "inference",
+            "friendlyName": "TFLITE ARTPEC-8",
+            "appName": "tflite",
             "vendor": "Fred Juhlin",
             "embeddedSdkVersion": "3.0",
             "user": {
@@ -23,12 +23,12 @@
 					"type": "transferCgi"
 				},
 				{
-					"name": "TeachableMachine",
+					"name": "model",
 					"access": "admin",
 					"type": "transferCgi"
 				},
 				{
-					"name": "run",
+					"name": "inference",
 					"access": "admin",
 					"type": "transferCgi"
 				}

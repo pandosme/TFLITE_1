@@ -1,7 +1,10 @@
-# Teachable Machine ACAP
+# TFLITE ACAP
 
 ## Overview
-This examples shows how to export models created in [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) and run them in the camera using the ACAP platform.
+This examples shows how to run TLITE models in an Axis camera using the ACAP platform.
+The TFLITE models must have one output with lable scores provided as an int8 array.
+Models exported from [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) are aligned with this output.
+
 The final output are ACAPs that can run camera based on:
 * ARTPEC-8
 * ARMv7hf TPU (P3255, AXIS Q1615 Mk III, Q1715, M4308 )
@@ -16,14 +19,14 @@ The package can be compiled as-is.  The model included is mobilenet V2 224 but t
 4. Unzip both files and place the files under app/model. 
 It is recommeded to have file names that easily seperates the EdgeTPU from the Quantized model file.  The labels.txt must be called labels.txt and must have an empty last line.
 5. Edit the Dockerfile line 70 and 72 with the filename you chose under app/model/ e.g. ```/opt/app/model/model_quant.tflite```.  Make sure that the EdgeTPU and Quant file are set on the correct lines based on platform.  Note that Dockerfile will copy the correct file to model/model.tflite to be included in the ACAP depending on the platform selected.
-6. Compile the ACAP from TeachableMachine/ directory. Type:  
+6. Compile the ACAP from tflite_1/ directory. Type:  
    ```. artpec8.sh```  
    ```. edgetpu.sh```  
    ```. armv7hf.sh```
 7. Install the eap-files in appropriate camera model
  
  ## Usage
-Clients may request inference using the the URL ```http://camera-ip/local/inference/run```.  The ACAP web page uses the same CGI to update the result every 500ms. 
+Clients may request inference using the the URL ```http://camera-ip/local/tflite/inference```.  The ACAP web page uses the same CGI to update the result every 500ms. 
 
 Response 
 
