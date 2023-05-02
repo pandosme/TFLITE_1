@@ -16,7 +16,7 @@ The package can be compiled as-is.  The model included is mobilenet V2 224 but t
 1. Clone this repository
 2. Use [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) to train your model.
 3. Export the model in both TFLITE Edge TPU and TFLITE Quntization.
-4. Unzip both files and place the files under app/model. 
+4. Unzip both files and place the files in source/model. The labels.txt should be placed in the same diorectory.
 It is recommeded to have file names that easily seperates the EdgeTPU from the Quantized model file.  The labels.txt must be called labels.txt and must have an empty last line.
 5. Edit the Dockerfile line 70 and 72 with the filename you saved in source/model/ e.g. ```/opt/app/model/model_quant.tflite```.  Make sure that the EdgeTPU and Quant file are set on the correct lines based on platform.  Note that Dockerfile will copy the correct file to model/model.tflite to be included in the ACAP depending on the platform selected.
 6. Compile the ACAP from tflite_1/ directory. Type:  
@@ -45,13 +45,21 @@ You can set confidence to elimiate unwanted detections in the list.
 
 ## Customization
 You can customize the package in name, HTML, CGI, behavior and output.  
-If you are using a model with size different to 224x224, edit source/html/config/model.json
+If you are using a model with size different to 224x224, edit source/html/config/model.json.
+
+The file main.c shows two examples to make inference and process the output
+1. HTTP Request - for the web page an clients that integrate using HTTP
+2. Timer - If the ACAP needs support other integration methods.   Look at hte example code that iterates through the detection list and extracts the lable and its score.
 
 ### Name
-The ACAP has a package name (inference) and a Nice Name (Teachable Macine).  These names are defined in the following files
-* source/manifest.json.*
+The ACAP has a package name (tflite) and a Nice Name (TFLITE xxxx).  These names can be changed.  Edit the following files:
+* source/manifest.json.artpec-8
+* source/manifest.json.cpu
+* source/manifest.json.edgetpu
 * source/Makefile (row 1)
 * source/main.c (row 21)
+
+
 
 ### User interface page
 * source/html/index.html
