@@ -31,7 +31,6 @@ Response
 {
   "device":"B8A44FXXXXXX",
   "timestamp":1681550011529,
-  "localtime":"2023-04-15 1:13:31",
   "duration":39,  //Amount of milliseconds used for inference
   "list":[
     { "label": string, "score": number 0-100},
