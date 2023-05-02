@@ -1,4 +1,4 @@
-# Teachable Machine ACAP
+# TFLITE ACAP
 
 ## Overview
 This examples shows how to export models created in [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) and run them in the camera using the ACAP platform.
