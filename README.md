@@ -44,7 +44,8 @@ Response
 You can set confidence to elimiate unwanted detections in the list.
 
 ## Customization
-You can customize the package in name, HTML, CGI, behavior and output.
+You can customize the package in name, HTML, CGI, behavior and output.  
+If you are using a model with size different to 224x224, edit source/html/config/model.json
 
 ### Name
 The ACAP has a package name (inference) and a Nice Name (Teachable Macine).  These names are defined in the following files
