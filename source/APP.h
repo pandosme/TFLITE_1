@@ -12,7 +12,6 @@ extern "C" {
 #endif
 
 
-
 typedef void (*APP_Callback) ( const char *service, cJSON* data);
 
 cJSON*		APP( const char *package, APP_Callback updateCallback );

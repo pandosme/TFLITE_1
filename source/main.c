@@ -60,13 +60,8 @@ Inference_HTTP(const HTTP_Response response,const HTTP_Request request) {
 
 static gboolean
 Inference_Timer() {
+
 	cJSON* inference = TFLITE_Inference();
-
-	if(tfliteModel == 0 ) {
-		LOG_WARN("WTF!!!\n");
-		return TRUE;
-	}
-
 
 	if(!inference)
 		return TRUE;
@@ -109,12 +104,13 @@ void sigintHandler(int sig) {
 
 int
 main() {
-    openlog(APP_PACKAGE, LOG_PID|LOG_CONS, LOG_USER);
-    signal(SIGINT, sigintHandler);
+	openlog(APP_PACKAGE, LOG_PID|LOG_CONS, LOG_USER);
+	signal(SIGINT, sigintHandler);
 
 	GMainLoop *loop;
 
 	APP( APP_PACKAGE, NULL );
+	
 	tfliteModel = TFLITE(APP_PACKAGE);
 	if( tfliteModel ) {
 		APP_Register("model",tfliteModel);
@@ -128,6 +124,6 @@ main() {
 	} else {
 		LOG_WARN("Stopped.  Unable to initialize model\n");
 	}
-	
+
 	TFLITE_Close();
 }

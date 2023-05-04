@@ -64,3 +64,13 @@ The ACAP has a package name (tflite) and a Nice Name (TFLITE xxxx).  These names
 ### User interface page
 * source/html/index.html
 
+
+# Troubleshooting
+- If log file says ```malloc(): invalid size (unsorted)``` the labels file does not contain one empty line at the bottom.
+
+
+# Changelog
+
+### 1.1.0
+- Fixed status properties that caused the web page to stop working.
+- Updated web page with mire info

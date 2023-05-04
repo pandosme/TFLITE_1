@@ -143,9 +143,7 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
     size_t totalBytesRead = 0;
     char* fileReadPtr = labelsData;
     while (totalBytesRead < labelsFileSize) {
-        numBytesRead =
-            read(labelsFd, fileReadPtr, labelsFileSize - totalBytesRead);
-
+        numBytesRead = read(labelsFd, fileReadPtr, labelsFileSize - totalBytesRead);
         if (numBytesRead < 1) {
             LOG_WARN( "%s: Failed reading from labels file: %s\n", __func__,
                    strerror(errno));
@@ -167,6 +165,7 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
     // We assume that there is always a line at the end of the file, possibly
     // terminated by newline char. Either way add this line as well to the
     // counter.
+//FIXED: Do not count the The last empty line  
     numLines++;
 
     labelArray = malloc(numLines * sizeof(char*));
@@ -211,7 +210,7 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
     }
 
     *labelsPtr = labelArray;
-    *numberOfLabelsPtr = numLines;
+    *numberOfLabelsPtr = (numLines-1);
     *labelFileBuffer = labelsData;
 
     ret = true;
