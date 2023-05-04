@@ -73,4 +73,4 @@ The ACAP has a package name (tflite) and a Nice Name (TFLITE xxxx).  These names
 
 ### 1.1.0
 - Fixed status properties that caused the web page to stop working.
-- Updated web page with mire info
+- Updated web page with more info
