@@ -32,6 +32,7 @@
 #include "HTTP.h"
 #include "FILE.h"
 #include "STATUS.h"
+#include "PARSER.h"
 
 #define LOG(fmt, args...)    { syslog(LOG_INFO, fmt, ## args); printf(fmt, ## args);}
 #define LOG_WARN(fmt, args...)    { syslog(LOG_WARNING, fmt, ## args); printf(fmt, ## args);}
@@ -48,8 +49,8 @@ double confidenceLevel = 60;
 unsigned int streamWidth = 0;
 unsigned int streamHeight = 0;
 
-char modelFile[128];
-char labelsFile[128];
+char modelFilePath[128];
+char labelsFilePath[128];
 size_t numberOfLabels = 0; // Will be parsed from the labels file
 
 // Name patterns for the temp file we will create.
@@ -70,58 +71,28 @@ void* larodOutput1Addr = MAP_FAILED;
 int larodModelFd = -1;
 int larodInputFd = -1;
 int larodOutput1Fd = -1;
-char** labels = NULL; // This is the array of label strings. The label
-					  // entries points into the large labelFileData buffer.
-char* labelFileData = NULL; // Buffer holding the complete collection of label strings.
 
+cJSON* labels = 0;
 cJSON* TFLITE_Settings = 0;
 const char* ACAP_PACKAGE = 0;
 
-/**
- * @brief Free up resources held by an array of labels.
- *
- * @param labels An array of label string pointers.
- * @param labelFileBuffer Heap buffer containing the actual string data.
- */
-void freeLabels(char** labelsArray, char* labelFileBuffer) {
-    free(labelsArray);
-    free(labelFileBuffer);
-}
-
-/**
- * @brief Reads a file of labels into an array.
- *
- * An array filled by this function should be freed using freeLabels.
- *
- * @param labelsPtr Pointer to a string array.
- * @param labelFileBuffer Pointer to the labels file contents.
- * @param labelsPath String containing the path to the labels file to be read.
- * @param numberOfLabelsPtr Pointer to number which will store number of labels read.
- * @return False if any errors occur, otherwise true.
- */
-static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsPath, size_t* numberOfLabelsPtr) {
-    // We cut off every row at 60 characters.
-    const size_t LINE_MAX_LEN = 60;
+cJSON*
+parseLabels(const char *labelsPath ) {
+    const size_t LINE_MAX_LEN = 120;
     bool ret = false;
     char* labelsData = NULL;  // Buffer containing the label file contents.
-    char** labelArray = NULL; // Pointers to each line in the labels text.
 
 	LOG_TRACE("%s:\n",__func__);
 
     struct stat fileStats = {0};
     if (stat(labelsPath, &fileStats) < 0) {
         LOG_WARN( "%s: Unable to get stats for label file %s: %s\n", __func__, labelsPath, strerror(errno));
-        return false;
+        return 0;
     }
 
-    // Sanity checking on the file size - we use size_t to keep track of file
-    // size and to iterate over the contents. off_t is signed and 32-bit or
-    // 64-bit depending on architecture. We just check toward 10 MByte as we
-    // will not encounter larger label files and both off_t and size_t should be
-    // able to represent 10 megabytes on both 32-bit and 64-bit systems.
     if (fileStats.st_size > (10 * 1024 * 1024)) {
         LOG_WARN( "%s: failed sanity check on labels file size\n", __func__);
-        return false;
+        return 0;
     }
 
     int labelsFd = open(labelsPath, O_RDONLY);
@@ -134,9 +105,9 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
     // Allocate room for a terminating NULL char after the last line.
     labelsData = malloc(labelsFileSize + 50);
     if (labelsData == NULL) {
-        LOG_WARN( "%s: Failed allocating labels text buffer: %s\n", __func__,
-               strerror(errno));
-        goto end;
+        LOG_WARN( "%s: Failed allocating lbuffer: %s\n", __func__, strerror(errno));
+		free(labelsData);
+		return cJSON_CreateArray();
     }
 
     ssize_t numBytesRead = -1;
@@ -145,82 +116,16 @@ static bool parseLabels(char*** labelsPtr, char** labelFileBuffer, char *labelsP
     while (totalBytesRead < labelsFileSize) {
         numBytesRead = read(labelsFd, fileReadPtr, labelsFileSize - totalBytesRead);
         if (numBytesRead < 1) {
-            LOG_WARN( "%s: Failed reading from labels file: %s\n", __func__,
-                   strerror(errno));
-            goto end;
+            LOG_WARN( "%s: Failed reading from labels file: %s\n", __func__, strerror(errno));
+			free(labelsData);
+			return 0;
         }
         totalBytesRead += (size_t) numBytesRead;
         fileReadPtr += numBytesRead;
     }
-
-    // Now count number of lines in the file - check all bytes except the last
-    // one in the file.
-    size_t numLines = 0;
-    for (size_t i = 0; i < (labelsFileSize - 1); i++) {
-        if (labelsData[i] == '\n') {
-            numLines++;
-        }
-    }
-
-    // We assume that there is always a line at the end of the file, possibly
-    // terminated by newline char. Either way add this line as well to the
-    // counter.
-//FIXED: Do not count the The last empty line  
-    numLines++;
-
-    labelArray = malloc(numLines * sizeof(char*));
-    if (!labelArray) {
-        LOG_WARN( "%s: Unable to allocate labels array: %s\n", __func__,
-               strerror(errno));
-        ret = false;
-        goto end;
-    }
-
-    size_t labelIdx = 0;
-    labelArray[labelIdx] = labelsData;
-    labelIdx++;
-    for (size_t i = 0; i < labelsFileSize; i++) {
-        if (labelsData[i] == '\n') {
-            // Register the string start in the list of labels.
-            labelArray[labelIdx] = labelsData + i + 1;
-            labelIdx++;
-            // Replace the newline char with string-ending NULL char.
-            labelsData[i] = '\0';
-        }
-    }
-
-    // If the very last byte in the labels file was a new-line we just
-    // replace that with a NULL-char. Refer previous for loop skipping looking
-    // for new-line at the end of file.
-    if (labelsData[labelsFileSize - 1] == '\n') {
-        labelsData[labelsFileSize - 1] = '\0';
-    }
-
-    // Make sure we always have a terminating NULL char after the label file
-    // contents.
-    labelsData[labelsFileSize] = '\0';
-
-    // Now go through the list of strings and cap if strings too long.
-    for (size_t i = 0; i < numLines; i++) {
-        size_t stringLen = strnlen(labelArray[i], LINE_MAX_LEN);
-        if (stringLen >= LINE_MAX_LEN) {
-            // Just insert capping NULL terminator to limit the string len.
-            *(labelArray[i] + LINE_MAX_LEN + 1) = '\0';
-        }
-    }
-
-    *labelsPtr = labelArray;
-    *numberOfLabelsPtr = (numLines-1);
-    *labelFileBuffer = labelsData;
-
-    ret = true;
-end:
-    if (!ret) {
-        freeLabels(labelArray, labelsData);
-    }
-    close(labelsFd);
-
-    return ret;
+	cJSON* list = PARSER_SplitToJSON( labelsData,'\n');
+	free( labelsData );
+	return list;
 }
 
 /**
@@ -363,13 +268,19 @@ TFLITE_Inference() {
 		return 0;
 	}
 
+	//Check that everything is initialized
+	if( !STATUS_Bool( "model", "state" ) ) {
+		return 0;
+	}
+
 
 	if( inferenceRunning )
 		return 0;
 	inferenceRunning = 1;
 
 	if( !provider) {
-		STATUS_SetString("model","state","No image provider");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","No image provider");
 		return 0;
 	}
 
@@ -377,7 +288,8 @@ TFLITE_Inference() {
 	VdoBuffer* buf = getLastFrameBlocking(provider);
 	if (!buf) {
 		LOG_WARN( "%s: No image avaialable\n", __func__ );
-		STATUS_SetString("model","state","No image provider");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","No image provider");
 		inferenceRunning = 0;
 		return 0;
 	}
@@ -408,7 +320,7 @@ TFLITE_Inference() {
 	gettimeofday(&startTs, NULL);
 	
 	if (!larodRunInference(conn, infReq, &error)) {
-		LOG_WARN( "%s: Unable to run inference on model %s: %s (%d)\n", __func__, modelFile, error->msg, error->code);
+		LOG_WARN( "%s: Unable to run inference on model %s: %s (%d)\n", __func__, modelFilePath, error->msg, error->code);
 		larodClearError(&error);		
 		inferenceRunning = 0;
 		return 0;
@@ -416,8 +328,7 @@ TFLITE_Inference() {
 
 	gettimeofday(&endTs, NULL);
 
-	elapsedMs = (unsigned int) (((endTs.tv_sec - startTs.tv_sec) * 1000) +
-								((endTs.tv_usec - startTs.tv_usec) / 1000));
+	elapsedMs = (unsigned int) (((endTs.tv_sec - startTs.tv_sec) * 1000) + ((endTs.tv_usec - startTs.tv_usec) / 1000));
 
 	cJSON* payload = cJSON_CreateObject();
 	cJSON_AddStringToObject( payload,"device", DEVICE_Prop("serial"));
@@ -431,9 +342,9 @@ TFLITE_Inference() {
 	int i;
 	for( i = 0; i < numberOfLabels; i++ ) {
 		double score = (double)(*((uint8_t*) (outputPtr + i)) / 255.0 * 100);  //Turn 0-255 to 0-100%
-		if( score >=  confidenceLevel ) {
+		if( score >=  confidenceLevel && labels && labels->type != cJSON_NULL ) {
 			cJSON* item = cJSON_CreateObject();
-			cJSON_AddStringToObject( item,"label",labels[i] );
+			cJSON_AddStringToObject( item,"label",cJSON_GetArrayItem(labels,i)->valuestring );
 			cJSON_AddNumberToObject( item,"score", (int)score );
 			cJSON_AddItemToArray(list,item);
 		}
@@ -519,11 +430,7 @@ TFLITE_Close() {
     larodDestroyTensors(&inputTensors, numInputs);
     larodDestroyTensors(&outputTensors, numOutputs);
     larodClearError(&error);
-
-    if (labels) {
-        freeLabels(labels, labelFileData);
-    }
-
+    
 	STATUS_SetString( "model", "status", "Not avaialble" );
 	STATUS_SetBool( "model", "state", 0 );	
 	STATUS_SetString( "model", "acrhitecture", "Undefined" );	
@@ -538,8 +445,8 @@ TFLITE( const char* package ) {
 	STATUS_SetBool( "model", "state", 0 );	
 	STATUS_SetString( "model", "architecture", "Undefined" );	
 
-	sprintf(modelFile,"/usr/local/packages/%s/model/model.tflite", package);
-	sprintf(labelsFile,"/usr/local/packages/%s/model/labels.txt", package);
+	sprintf(modelFilePath,"/usr/local/packages/%s/model/model.tflite", package);
+	sprintf(labelsFilePath,"/usr/local/packages/%s/model/labels.txt", package);
 
 	TFLITE_Settings = FILE_Read( "html/config/model.json" );
 	if(!TFLITE_Settings)
@@ -559,47 +466,50 @@ TFLITE( const char* package ) {
 	confidenceLevel = cJSON_GetObjectItem(TFLITE_Settings,"confidence")?cJSON_GetObjectItem(TFLITE_Settings,"confidence")->valuedouble:60.0;
 	modelWidth = cJSON_GetObjectItem(TFLITE_Settings,"modelWidth")?cJSON_GetObjectItem(TFLITE_Settings,"modelWidth")->valueint:224;
 	modelHeigth = cJSON_GetObjectItem(TFLITE_Settings,"modelHeigth")?cJSON_GetObjectItem(TFLITE_Settings,"modelHeigth")->valueint:224;
+	
+	if( !cJSON_GetObjectItem(TFLITE_Settings,"labels") )
+		cJSON_AddItemToObject(TFLITE_Settings,"labels",parseLabels(labelsFilePath));
+	if( cJSON_GetObjectItem(TFLITE_Settings,"labels")->type == cJSON_NULL )
+		cJSON_ReplaceItemInObject(TFLITE_Settings,"labels",parseLabels(labelsFilePath));
+	labels = cJSON_GetObjectItem(TFLITE_Settings,"labels");
+	numberOfLabels = labels?cJSON_GetArraySize(labels):0;
 
+	if( numberOfLabels == 0 ){
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","No labels for this model");
+        TFLITE_Close();
+		return 0;
+	}
 
     if (!chooseStreamResolution(modelWidth, modelHeigth, &streamWidth,&streamHeight)) {
         LOG_WARN( "%s: Failed choosing stream resolution\n", __func__);
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","No valid stream resolutions");
         TFLITE_Close();
-		STATUS_SetString("model","state","No valid stream resolutions");
-		return 0;
-    }
-	
-    if (!labelsFile) {
-        LOG_WARN( "%s: Missing labels file\n",__func__);
-		TFLITE_Close();
-		STATUS_SetString( "model", "status", "Missing labels file" );
-		return 0;
-	}
-	
-    if (!parseLabels(&labels, &labelFileData, labelsFile, &numberOfLabels)) {
-        LOG_WARN( "%s: Failed creating parsing labels file\n",__func__);
-		TFLITE_Close();
-		STATUS_SetString("model","state","Invalid labels file");
 		return 0;
     }
 
     provider = createImgProvider(streamWidth, streamHeight, 2, VDO_FORMAT_YUV);
     if (!provider) {
 		LOG_WARN( "%s: Failed to create ImgProvider\n", __func__);
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Failed to create image provider");
         TFLITE_Close();
-		STATUS_SetString("model","state","Failed to create image provider");
 		return 0;
     }
 
-    larodModelFd = open(modelFile, O_RDONLY);
+    larodModelFd = open(modelFilePath, O_RDONLY);
     if (larodModelFd < 0) {
-        LOG_WARN( "%s: Unable to open model file %s: %s\n", __func__,modelFile,  strerror(errno));
+        LOG_WARN( "%s: Unable to open model file %s: %s\n", __func__,modelFilePath,  strerror(errno));
         TFLITE_Close();
-		STATUS_SetString("model","state","Model file does not exist");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Model file does not exist");
 		return 0;
     }
     if (!setupLarod(larodModelFd, &conn, &model)) {
         TFLITE_Close();
-		STATUS_SetString("model","state","Failed setting up architecture");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Failed setting up architecture");
 		return 0;
     }
 
@@ -607,14 +517,16 @@ TFLITE( const char* package ) {
     if (!createAndMapTmpFile(CONV_INP_FILE_PATTERN, modelWidth * modelHeigth * CHANNELS, &larodInputAddr, &larodInputFd)) {
 		STATUS_SetString( "model", "status", "Allocation failed" );
         TFLITE_Close();
-		STATUS_SetString("model","state","Input data allocation failed");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Input data allocation failed");
 		return 0;
     }
     // Allocate space for output tensor 1 (Locations)
     if (!createAndMapTmpFile(CONV_OUT1_FILE_PATTERN, numberOfLabels,  &larodOutput1Addr, &larodOutput1Fd)) {
 		STATUS_SetString( "model", "status", "Allocation failed" );
         TFLITE_Close();
-		STATUS_SetString("model","state","Output data allocation failed");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Output data allocation failed");
 		return 0;
     }
     inputTensors = larodCreateModelInputs(model, &numInputs, &error);
@@ -622,14 +534,16 @@ TFLITE( const char* package ) {
 		STATUS_SetString( "model", "status", "Failed retrieving input tensors" );
         LOG_WARN( "Failed retrieving input tensors: %s\n", error->msg);
         TFLITE_Close();
-		STATUS_SetString("model","state","Failed initializing input tensor");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Failed initializing input tensor");
 		return 0;
     }
     if (!larodSetTensorFd(inputTensors[0], larodInputFd, &error)) {
 		STATUS_SetString( "model", "status", "Failed setting input tensor" );
         LOG_WARN( "%s: Failed setting input tensor fd: %s\n", __func__,error->msg);
         TFLITE_Close();
-		STATUS_SetString("model","state","Failed initializing input tensor");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Failed initializing input tensor");
 		return 0;
     }
     outputTensors = larodCreateModelOutputs(model, &numOutputs, &error);
@@ -637,7 +551,8 @@ TFLITE( const char* package ) {
 		STATUS_SetString( "model", "status", "Failed retrieving output tensors" );
         LOG_WARN( "%s: Failed retrieving output tensors: %s\n", __func__, error->msg);
         TFLITE_Close();
-		STATUS_SetString("model","state","Failed initializing output tensor");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Failed initializing output tensor");
 		return 0;
     }
 
@@ -645,7 +560,8 @@ TFLITE( const char* package ) {
 		STATUS_SetString( "model", "status", "Failed setting output tensor" );
         LOG_WARN( "%s: Failed setting output tensor fd: %s\n", __func__, error->msg);
         TFLITE_Close();
-		STATUS_SetString("model","state","Failed initializing output tensor");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Failed initializing output tensor");
 		return 0;
     }
 
@@ -654,7 +570,8 @@ TFLITE( const char* package ) {
 		STATUS_SetString( "model", "status", "Failed creating inference request" );
         LOG_WARN( "%s: Failed creating inference request: %s\n", __func__, error->msg);
         TFLITE_Close();
-		STATUS_SetString("model","state","Failed creating inference request");
+		STATUS_SetBool("model","state",0);
+		STATUS_SetString("model","status","Failed creating inference request");
 		return 0;
     }
 

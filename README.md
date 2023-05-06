@@ -71,6 +71,9 @@ The ACAP has a package name (tflite) and a Nice Name (TFLITE xxxx).  These names
 
 # Changelog
 
+### 1.2.0
+- Fixed flawed labels.txt parser.
+
 ### 1.1.0
 - Fixed status properties that caused the web page to stop working.
 - Updated web page with more info

@@ -57,8 +57,12 @@ td.value  {color: blue;}
 							</div>
 							<script>
 							$("#settings_confidence").change(function() {
+								$("#detections").empty();
 								App.model.confidence = parseInt( $("#settings_confidence").val() );
-								var url = "model?json=" + encodeURIComponent( JSON.stringify(App.model) );
+								var setting = {
+									confidence: App.model.confidence
+								}
+								var url = "model?json=" + encodeURIComponent( JSON.stringify(setting) );
 								$.ajax({ type: "GET", url: url, dataType: 'text',  cache: false,
 									error: function( response) {
 										alert(response.statusText);
