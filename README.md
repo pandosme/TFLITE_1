@@ -12,6 +12,10 @@ The final output are ACAPs that can run camera based on:
 
 The package can be compiled as-is.  The model included is mobilenet V2 224 but the idea is to replace this with your own model.
 
+## Prerequisite
+* A Linux PC (or Linux VM) with [Docker](https://docs.docker.com/engine/install/) and [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) installed
+
+
 ## Building
 1. Clone this repository
 2. Use [Googels Teachable Machine](https://teachablemachine.withgoogle.com/) to train your model.
